@@ -135,74 +135,10 @@
         <h2>Add New Job</h2>
         <form id="jobForm">
             <input type="text" id="title" placeholder="Job Title" required>
-            <input type="text" id="company" placeholder="Company Name" required>
-            <textarea id="description" placeholder="Job Description" required></textarea>
-            <input type="url" id="location" placeholder="Google Maps Link" required>
-            <button type="submit">Add Job</button>
+            <in
         </form>
         <div id="message"></div>
-        <div id="jobsList"></div>
-    </div>
-    <div id="map"></div>
-
-    <script src="https://openlayers.org/en/v6.15.1/build/ol.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-        // Initialize Supabase
-        const supabaseUrl = 'https://jlwhzoesyqsyzdkdpebc.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc';
-        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
-        // Initialize Map
-        const map = new ol.Map({
-            target: 'map',
-            layers: [
-                new ol.layer.Tile({
-                    source: new ol.source.OSM()
-                })
-            ],
-            view: new ol.View({
-                center: ol.proj.fromLonLat([12.4964, 41.9028]), // Rome coordinates
-                zoom: 13
-            })
-        });
-
-        // Create vector layer for markers
-        const vectorSource = new ol.source.Vector();
-        const vectorLayer = new ol.layer.Vector({
-            source: vectorSource,
-            style: new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 8,
-                    fill: new ol.style.Fill({color: '#007bff'}),
-                    stroke: new ol.style.Stroke({color: '#fff', width: 2})
-                })
-            })
-        });
-        map.addLayer(vectorLayer);
-
-        // Extract coordinates from Google Maps link
-        function extractCoordinates(url) {
-            try {
-                const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-                const match = url.match(regex);
-                if (match) {
-                    return {
-                        latitude: parseFloat(match[1]),
-                        longitude: parseFloat(match[2])
-                    };
-                }
-                return null;
-            } catch (error) {
-                console.error('Error extracting coordinates:', error);
-                return null;
-            }
-        }
-
-        // Add marker to map
-        function addMarker(longitude, latitude, title) {
-            const feature = new ol.Feature({
-                geometry: new ol.geom.Point(ol.proj.fromLonLat([longitude, latitude])),
+        <div id="joLat([longitude, latitude])),
                 name: title
             });
             vectorSource.addFeature(feature);
