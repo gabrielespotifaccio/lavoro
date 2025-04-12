@@ -3,12 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copenhagen Job Map</title>
-
-    <!-- OpenLayers Stylesheet -->
+    <title>Job Listings Map</title>
     <link href="https://cdn.jsdelivr.net/npm/ol/dist/ol.css" rel="stylesheet">
-
-    <!-- Custom Styles -->
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,102 +12,219 @@
             padding: 0;
         }
 
-        #map {
-            height: 100vh; /* La mappa occupa tutta l'altezza */
-            width: 100%;   /* La mappa occupa tutta la larghezza */
+        header {
+            background: #282c34;
+            color: #fff;
+            padding: 15px;
+            text-align: center;
         }
 
-        .job-details {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 1000;
-            background: white;
+        main {
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+        }
+
+        #map {
+            flex: 2;
+            height: 100%;
+            width: 100%;
+        }
+
+        #form-container {
+            flex: 1;
+            padding: 20px;
+            background: #f7f7f7;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+
+        input, textarea, button {
+            margin-bottom: 15px;
             padding: 10px;
-            border: 1px solid #ddd;
+            font-size: 1em;
+            border: 1px solid #ccc;
             border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        button {
+            background: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
         }
     </style>
 </head>
 <body>
-    <!-- Contenitore per la Mappa -->
-    <div id="map"></div>
+    <header>
+        <h1>Job Listings Map</h1>
+    </header>
+    <main>
+        <!-- Form per aggiungere nuovi lavori -->
+        <div id="form-container">
+            <h1>Aggiungi un Nuovo Lavoro</h1>
+            <form id="jobForm">
+                <label for="title">Titolo del Lavoro:</label>
+                <input type="text" id="title" required>
+
+                <label for="company">Nome dell'Azienda:</label>
+                <input type="text" id="company" required>
+
+                <label for="description">Descrizione:</label>
+                <textarea id="description" required></textarea>
+
+                <label for="mapsLink">Link di Google Maps:</label>
+                <input type="url" id="mapsLink" required>
+
+                <button type="submit">Aggiungi Lavoro</button>
+            </form>
+        </div>
+
+        <!-- Mappa -->
+        <div id="map"></div>
+    </main>
 
     <!-- OpenLayers Script -->
     <script src="https://cdn.jsdelivr.net/npm/ol/dist/ol.js"></script>
 
+    <!-- Supabase Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
     <script>
-        // Inizializza la Mappa
+        // Configurazione di Supabase
+        const supabase = supabase.createClient(
+            'https://jlwhzoesyqsyzdkdpebc.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc'
+        );
+
+        // Inizializza la mappa
         const map = new ol.Map({
-            target: 'map', // Collegamento al contenitore con id='map'
+            target: "map",
             layers: [
-                // Layer per OpenStreetMap
                 new ol.layer.Tile({
-                    source: new ol.source.OSM()
-                })
+                    source: new ol.source.OSM(),
+                }),
             ],
             view: new ol.View({
-                center: ol.proj.fromLonLat([12.5683, 55.6761]), // Copenhagen
-                zoom: 12 // Livello di Zoom
-            })
+                center: ol.proj.fromLonLat([12.5683, 55.6761]),
+                zoom: 12,
+            }),
         });
 
-        // Array di esempio per le Offerte di Lavoro
-        const jobPositions = [
-            {
-                title: "Software Developer",
-                company: "Tech Co",
-                description: "Full-stack developer position",
-                coordinates: [12.5683, 55.6761]
-            },
-            {
-                title: "Marketing Specialist",
-                company: "Marketing Inc.",
-                description: "Digital marketing expert needed",
-                coordinates: [12.572, 55.6781]
-            },
-            {
-                title: "Data Analyst",
-                company: "DataHub",
-                description: "Analyze key business data",
-                coordinates: [12.563, 55.6741]
+        // Funzione per estrarre coordinate dal link di Google Maps
+        const extractCoordinates = (url) => {
+            const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
+            const match = url.match(regex);
+            if (match) {
+                return {
+                    latitude: parseFloat(match[1]),
+                    longitude: parseFloat(match[2]),
+                };
             }
-        ];
+            return null;
+        };
 
-        const vectorSource = new ol.source.Vector(); // Per gestire i marcatori
+        // Form Submission: Aggiungi un nuovo lavoro
+        const form = document.getElementById("jobForm");
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
 
-        jobPositions.forEach((job) => {
+            const title = document.getElementById("title").value;
+            const company = document.getElementById("company").value;
+            const description = document.getElementById("description").value;
+            const mapsLink = document.getElementById("mapsLink").value;
+
+            const coordinates = extractCoordinates(mapsLink);
+            if (!coordinates) {
+                alert("Link di Google Maps non valido!");
+                return;
+            }
+
+            const { latitude, longitude } = coordinates;
+
+            // Salva il lavoro su Supabase
+            const { data, error } = await supabase.from("jobs").insert([
+                {
+                    title,
+                    company,
+                    description,
+                    latitude,
+                    longitude,
+                },
+            ]);
+
+            if (error) {
+                console.error("Errore durante il salvataggio:", error);
+                alert("Errore durante il salvataggio del lavoro.");
+            } else {
+                alert("Lavoro aggiunto con successo!");
+                form.reset();
+                loadJobs();
+            }
+        });
+
+        // Carica i lavori da Supabase
+        const loadJobs = async () => {
+            const { data: jobs, error } = await supabase.from("jobs").select("*");
+
+            if (error) {
+                console.error("Errore nel caricamento dei lavori:", error);
+                return;
+            }
+
+            jobs.forEach((job) => {
+                if (job.latitude && job.longitude) {
+                    addMarker(job.longitude, job.latitude, job.title, job.company);
+                }
+            });
+        };
+
+        // Aggiungi un marker alla mappa
+        const addMarker = (longitude, latitude, title, company) => {
             const marker = new ol.Feature({
-                geometry: new ol.geom.Point(ol.proj.fromLonLat(job.coordinates)),
-                title: job.title,
-                company: job.company,
-                description: job.description
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([longitude, latitude])),
+                title: title,
+                company: company,
             });
 
-            vectorSource.addFeature(marker);
-        });
+            const vectorSource = new ol.source.Vector({
+                features: [marker],
+            });
 
-        const markerLayer = new ol.layer.Vector({
-            source: vectorSource,
-            style: new ol.style.Style({
-                image: new ol.style.Icon({
-                    src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Icona Marcatore
-                    scale: 0.08
-                })
-            })
-        });
+            const vectorLayer = new ol.layer.Vector({
+                source: vectorSource,
+                style: new ol.style.Style({
+                    image: new ol.style.Icon({
+                        src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+                        scale: 0.05,
+                    }),
+                }),
+            });
 
-        map.addLayer(markerLayer);
+            map.addLayer(vectorLayer);
+        };
 
-        // Evento per visualizzare i dettagli del lavoro
-        map.on('singleclick', (evt) => {
-            const features = map.getFeaturesAtPixel(evt.pixel);
-            if (features) {
-                const job = features[0].getProperties();
-                alert(`Job Title: ${job.title}\nCompany: ${job.company}\nDescription: ${job.description}`);
-            }
-        });
+        // Carica i lavori alla pagina di caricamento
+        loadJobs();
     </script>
 </body>
 </html>
