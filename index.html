@@ -1,265 +1,313 @@
-Vediamo di risolvere il problema della mappa che non viene visualizzata. Assicurati di avere il file `index.html` configurato correttamente e che tutti gli stili e gli script siano caricati correttamente.
-
-### Risoluzione Passo Passo
-
-1. **Verifica della struttura del file HTML**:
-   - Assicurati che il `div` per la mappa abbia l'id corretto.
-   - Controlla che l'altezza e la larghezza della mappa siano impostate correttamente nel CSS.
-
-2. **Inizializzazione di OpenLayers**:
-   - Verifica che la libreria OpenLayers sia inclusa correttamente.
-
-3. **Console del Browser**:
-   - Controlla eventuali errori nella console del browser (F12 o `Ctrl+Shift+I` per aprire la console).
-
-### Codice Completo da Zero
-Ecco il codice semplificato e corretto per assicurarti che la mappa OpenLayers si visualizzi correttamente e si integri con Supabase per gestire i lavori.
-
----
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Listings Map</title>
-    <link href="https://cdn.jsdelivr.net/npm/ol/dist/ol.css" rel="stylesheet">
+    <title>Job Map Platform</title>
+    <link rel="stylesheet" href="https://openlayers.org/en/v6.15.1/css/ol.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
         }
 
-        header {
-            background: #282c34;
-            color: #fff;
-            padding: 15px;
-            text-align: center;
-        }
-
-        main {
+        body {
+            font-family: Arial, sans-serif;
             display: flex;
-            flex-direction: row;
             height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 400px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            flex-shrink: 0;
         }
 
         #map {
-            flex: 2;
+            flex-grow: 1;
             height: 100%;
-            width: 100%;
-        }
-
-        #form-container {
-            flex: 1;
-            padding: 20px;
-            background: #f7f7f7;
-            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-            overflow-y: auto;
-        }
-
-        h1 {
-            font-size: 1.5em;
-            margin-bottom: 20px;
         }
 
         form {
             display: flex;
             flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
         }
 
-        label {
-            margin: 10px 0 5px;
-            font-weight: bold;
+        input, textarea {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
         }
 
-        input, textarea, button {
-            margin-bottom: 15px;
-            padding: 10px;
-            font-size: 1em;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+        textarea {
+            min-height: 100px;
+            resize: vertical;
         }
 
         button {
-            background: #007BFF;
+            padding: 10px;
+            background: #007bff;
             color: white;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
         }
 
         button:hover {
             background: #0056b3;
         }
+
+        #jobsList {
+            margin-top: 20px;
+        }
+
+        .job-item {
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .job-item strong {
+            color: #007bff;
+            font-size: 16px;
+        }
+
+        .job-item small {
+            color: #666;
+            display: block;
+            margin-top: 5px;
+        }
+
+        #message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .error {
+            background-color: #ffe6e6;
+            border: 1px solid #ffcccc;
+            color: #d8000c;
+        }
+
+        .success {
+            background-color: #e6ffe6;
+            border: 1px solid #ccffcc;
+            color: #006400;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 50vh;
+            }
+
+            #map {
+                height: 50vh;
+            }
+        }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Job Listings Map</h1>
-    </header>
-    <main>
-        <!-- Form per aggiungere nuovi lavori -->
-        <div id="form-container">
-            <h1>Aggiungi un Nuovo Lavoro</h1>
-            <form id="jobForm">
-                <label for="title">Titolo del Lavoro:</label>
-                <input type="text" id="title" required>
+    <div id="sidebar">
+        <h2>Add New Job</h2>
+        <form id="jobForm">
+            <input type="text" id="title" placeholder="Job Title" required>
+            <input type="text" id="company" placeholder="Company Name" required>
+            <textarea id="description" placeholder="Job Description" required></textarea>
+            <input type="url" id="location" placeholder="Google Maps Link" required>
+            <button type="submit">Add Job</button>
+        </form>
+        <div id="message"></div>
+        <div id="jobsList"></div>
+    </div>
+    <div id="map"></div>
 
-                <label for="company">Nome dell'Azienda:</label>
-                <input type="text" id="company" required>
-
-                <label for="description">Descrizione:</label>
-                <textarea id="description" required></textarea>
-
-                <label for="mapsLink">Link di Google Maps:</label>
-                <input type="url" id="mapsLink" required>
-
-                <button type="submit">Aggiungi Lavoro</button>
-            </form>
-        </div>
-
-        <!-- Mappa -->
-        <div id="map"></div>
-    </main>
-
-    <!-- OpenLayers Script -->
-    <script src="https://cdn.jsdelivr.net/npm/ol/dist/ol.js"></script>
-
-    <!-- Supabase Script -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-
+    <script src="https://openlayers.org/en/v6.15.1/build/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // Configurazione di Supabase
-        const supabase = supabase.createClient(
-            'https://jlwhzoesyqsyzdkdpebc.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc'
-        );
+        // Initialize Supabase
+        const supabaseUrl = 'https://jlwhzoesyqsyzdkdpebc.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc';
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-        // Inizializza la mappa
+        // Initialize Map
         const map = new ol.Map({
             target: 'map',
             layers: [
                 new ol.layer.Tile({
-                    source: new ol.source.OSM(),
-                }),
+                    source: new ol.source.OSM()
+                })
             ],
             view: new ol.View({
-                center: ol.proj.fromLonLat([12.5683, 55.6761]), // Coordinate di Copenhagen
-                zoom: 12,
-            }),
+                center: ol.proj.fromLonLat([12.4964, 41.9028]), // Rome coordinates
+                zoom: 13
+            })
         });
 
-        // Funzione per estrarre coordinate dal link di Google Maps
-        const extractCoordinates = (url) => {
-            const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-            const match = url.match(regex);
-            if (match) {
-                return {
-                    latitude: parseFloat(match[1]),
-                    longitude: parseFloat(match[2]),
-                };
-            }
-            return null;
-        };
+        // Create vector layer for markers
+        const vectorSource = new ol.source.Vector();
+        const vectorLayer = new ol.layer.Vector({
+            source: vectorSource,
+            style: new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({color: '#007bff'}),
+                    stroke: new ol.style.Stroke({color: '#fff', width: 2})
+                })
+            })
+        });
+        map.addLayer(vectorLayer);
 
-        // Form Submission: Aggiungi un nuovo lavoro
-        const form = document.getElementById('jobForm');
-        form.addEventListener('submit', async (event) => {
-            event.preventDefault();
+        // Extract coordinates from Google Maps link
+        function extractCoordinates(url) {
+            try {
+                const regex = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
+                const match = url.match(regex);
+                if (match) {
+                    return {
+                        latitude: parseFloat(match[1]),
+                        longitude: parseFloat(match[2])
+                    };
+                }
+                return null;
+            } catch (error) {
+                console.error('Error extracting coordinates:', error);
+                return null;
+            }
+        }
+
+        // Add marker to map
+        function addMarker(longitude, latitude, title) {
+            const feature = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([longitude, latitude])),
+                name: title
+            });
+            vectorSource.addFeature(feature);
+        }
+
+        // Show message function
+        function showMessage(text, isError = false) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = isError ? 'error' : 'success';
+            messageDiv.style.display = 'block';
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Load jobs from Supabase
+        async function loadJobs() {
+            try {
+                const { data: jobs, error } = await supabase
+                    .from('jobs')
+                    .select('*');
+
+                if (error) throw error;
+
+                // Clear existing markers
+                vectorSource.clear();
+
+                // Add markers for each job
+                jobs.forEach(job => {
+                    if (job.latitude && job.longitude) {
+                        addMarker(job.longitude, job.latitude, job.title);
+                    }
+                });
+
+                // Update jobs list
+                const jobsList = document.getElementById('jobsList');
+                jobsList.innerHTML = '<h3>Recent Jobs</h3>';
+                jobs.forEach(job => {
+                    const jobElement = document.createElement('div');
+                    jobElement.className = 'job-item';
+                    jobElement.innerHTML = `
+                        <strong>${job.title}</strong><br>
+                        ${job.company}<br>
+                        <small>${job.description}</small>
+                    `;
+                    jobsList.appendChild(jobElement);
+                });
+
+            } catch (error) {
+                console.error('Error loading jobs:', error);
+                showMessage('Error loading jobs', true);
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('jobForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
 
             const title = document.getElementById('title').value;
             const company = document.getElementById('company').value;
             const description = document.getElementById('description').value;
-            const mapsLink = document.getElementById('mapsLink').value;
+            const locationUrl = document.getElementById('location').value;
 
-            const coordinates = extractCoordinates(mapsLink);
+            const coordinates = extractCoordinates(locationUrl);
             if (!coordinates) {
-                alert("Link di Google Maps non valido!");
+                showMessage('Invalid Google Maps link. Please make sure to copy the URL from Google Maps.', true);
                 return;
             }
 
-            const { latitude, longitude } = coordinates;
+            try {
+                const { error } = await supabase
+                    .from('jobs')
+                    .insert([{
+                        title,
+                        company,
+                        description,
+                        latitude: coordinates.latitude,
+                        longitude: coordinates.longitude
+                    }]);
 
-            // Salva il lavoro su Supabase
-            const { data, error } = await supabase.from('jobs').insert([
-                {
-                    title,
-                    company,
-                    description,
-                    latitude,
-                    longitude,
-                },
-            ]);
+                if (error) throw error;
 
-            if (error) {
-                console.error("Errore durante il salvataggio:", error);
-                alert("Errore durante il salvataggio del lavoro.");
-            } else {
-                alert("Lavoro aggiunto con successo!");
-                form.reset();
+                showMessage('Job added successfully!');
+                e.target.reset();
                 loadJobs();
+
+            } catch (error) {
+                console.error('Error adding job:', error);
+                showMessage('Error adding job', true);
             }
         });
 
-        // Carica i lavori da Supabase
-        const loadJobs = async () => {
-            const { data: jobs, error } = await supabase.from('jobs').select('*');
-
-            if (error) {
-                console.error("Errore nel caricamento dei lavori:", error);
-                return;
+        // Add click handler to show job info
+        map.on('click', function(evt) {
+            const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+                return feature;
+            });
+            if (feature) {
+                alert(feature.get('name'));
             }
+        });
 
-            jobs.forEach((job) => {
-                if (job.latitude && job.longitude) {
-                    addMarker(job.longitude, job.latitude, job.title, job.company);
-                }
-            });
-        };
-
-        // Aggiungi un marcatore alla mappa
-        const addMarker = (longitude, latitude, title, company) => {
-            const marker = new ol.Feature({
-                geometry: new ol.geom.Point(ol.proj.fromLonLat([longitude, latitude])),
-                title: title,
-                company: company,
-            });
-
-            const vectorSource = new ol.source.Vector({
-                features: [marker],
-            });
-
-            const vectorLayer = new ol.layer.Vector({
-                source: vectorSource,
-                style: new ol.style.Style({
-                    image: new ol.style.Icon({
-                        src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-                        scale: 0.05,
-                    }),
-                }),
-            });
-
-            map.addLayer(vectorLayer);
-        };
-
-        // Carica i lavori alla pagina di caricamento
-        window.onload = () => {
-            loadJobs();
-        };
+        // Initial load
+        loadJobs();
     </script>
 </body>
 </html>
-```
-
-### **Verifica**
-1. **Copia il Codice** in un file `index.html`.
-2. **Apri il File** nel browser: questo dovrebbe mostrare la mappa correttamente.
-3. **Controlla la Console del Browser** per eventuali errori che possano aiutarti a identificare problemi.
-
-Se la mappa ancora non appare correttamente, verifica i seguenti punti:
-- Assicurati che la libreria OpenLayers (`ol.js` e `ol.css`) sia caricata correttamente.
-- Controlla la console del browser per eventuali errori.
-- Assicurati che il div `map` abbia le dimensioni corrette.
-
-Fammi sapere se ci sono ancora problemi o se hai bisogno di ulteriori modifiche! 😊 
