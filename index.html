@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mappa Annunci di Lavoro</title>
-    <!-- OpenLayers CSS -->
+    <!-- OpenLayers CSS e JS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/css/ol.css" type="text/css">
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/build/ol.js"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -251,7 +254,7 @@
             margin-bottom: 10px;
         }
         
-        /* Stili responsive */
+        /* Stili responsivi */
         @media (max-width: 768px) {
             .main-content {
                 flex-direction: column;
@@ -324,6 +327,24 @@
         .ol-popup-closer:after {
             content: "✖";
         }
+        
+        /* Aggiungi un bordo indicatore quando la mappa è caricata */
+        .map-loaded {
+            border: 2px solid #28a745;
+        }
+        
+        /* Indicatore di caricamento mappa */
+        .map-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -335,7 +356,8 @@
     <div class="main-content">
         <div class="map-container">
             <div id="map"></div>
-            <div id="popup" class="ol-popup">
+            <div id="mapLoading" class="map-loading">Caricamento mappa...</div>
+            <div id="popup" class="ol-popup" style="display: none;">
                 <a href="#" id="popup-closer" class="ol-popup-closer"></a>
                 <div id="popup-content"></div>
             </div>
@@ -344,33 +366,31 @@
         <div class="sidebar">
             <div id="jobList" class="job-list">
                 <h3>Annunci di Lavoro Recenti</h3>
-                <p>Caricamento annunci in corso...</p>
+                <p>Caricamento in corso...</p>
             </div>
             
             <div class="job-form">
-                <h3>Pubblica un Annuncio</h3>
+                <h3>Pubblica un Nuovo Annuncio</h3>
                 <form id="jobForm">
                     <div class="form-group">
-                        <label for="jobTitle">Titolo Posizione</label>
-                        <input type="text" id="jobTitle" required>
+                        <label for="jobTitle">Titolo del Lavoro</label>
+                        <input type="text" id="jobTitle" name="jobTitle" required>
                     </div>
                     
                     <div class="form-group">
                         <label for="company">Azienda</label>
-                        <input type="text" id="company" required>
+                        <input type="text" id="company" name="company" required>
                     </div>
                     
                     <div class="form-group">
                         <label for="description">Descrizione</label>
-                        <textarea id="description" required></textarea>
+                        <textarea id="description" name="description" required></textarea>
                     </div>
                     
                     <div class="form-group">
-                        <label for="googleMapsLink">Link Google Maps della Posizione</label>
-                        <input type="url" id="googleMapsLink" required>
-                        <div id="linkError" class="error-message">
-                            Il link Google Maps non è valido. Inserisci un link che contenga le coordinate geografiche.
-                        </div>
+                        <label for="googleMapsLink">Link di Google Maps</label>
+                        <input type="text" id="googleMapsLink" name="googleMapsLink" placeholder="Es. https://maps.google.com/?q=45.4642,9.1900" required>
+                        <div id="linkError" class="error-message">Inserisci un link valido di Google Maps</div>
                     </div>
                     
                     <button type="submit">Pubblica Annuncio</button>
@@ -385,184 +405,224 @@
     
     <div id="successOverlay" class="success-overlay">
         <div class="success-message">
-            <h3>Annuncio Pubblicato!</h3>
-            <p>Il tuo annuncio di lavoro è stato pubblicato con successo.</p>
+            <h3>Annuncio Pubblicato con Successo!</h3>
+            <p>Il tuo annuncio è stato aggiunto alla mappa.</p>
         </div>
     </div>
-
-    <!-- Script OpenLayers -->
-    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/build/ol.js"></script>
     
-    <!-- Script Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <!-- Script dell'applicazione -->
     <script>
-        // Inizializza Supabase client
+        // Configurazione Supabase
         const supabaseUrl = 'https://jlwhzoesyqsyzdkdpebc.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc';
-        const supabase = supabaseJs.createClient(supabaseUrl, supabaseKey);
-
-        // Variabili globali
-        let map;
-        let vectorSource;
-        let popupOverlay;
-        let jobsData = [];
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODIzMzIwNDksImV4cCI6MTk5NzkwODA0OX0.JlUmJG7d7CjTKDxTEfaq3sLPFGJUwkQQZ3ySZ3YYdqk';
         
-        // Funzione per inizializzare la mappa
-        function initMap() {
-            // Crea un elemento popup
-            const container = document.getElementById('popup');
-            const content = document.getElementById('popup-content');
-            const closer = document.getElementById('popup-closer');
+        let map; // Variabile globale per la mappa
+        let vectorSource; // Variabile globale per il source dei vettori
+        let popupOverlay; // Variabile globale per il popup
+        let jobsData = []; // Array per memorizzare i dati dei lavori
+        
+        // Funzione per estrarre le coordinate da un link di Google Maps
+        function extractCoordinatesFromLink(link) {
+            if (!link) return null;
             
-            // Crea un overlay per il popup
-            popupOverlay = new ol.Overlay({
-                element: container,
-                autoPan: true,
-                autoPanAnimation: {
-                    duration: 250
+            let coordinates = null;
+            
+            // Pattern per vari formati di link di Google Maps
+            const patterns = [
+                // Pattern per link con query ?q=lat,lng
+                /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
+                // Pattern per link con @lat,lng
+                /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+                // Pattern per link con ll=lat,lng
+                /ll=(-?\d+\.\d+),(-?\d+\.\d+)/,
+                // Pattern per coordinate dirette lat,lng
+                /^(-?\d+\.\d+),(-?\d+\.\d+)$/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = link.match(pattern);
+                if (match && match.length >= 3) {
+                    coordinates = {
+                        latitude: parseFloat(match[1]),
+                        longitude: parseFloat(match[2])
+                    };
+                    break;
                 }
-            });
+            }
             
-            // Aggiungi un handler per chiudere il popup
-            closer.onclick = function() {
-                popupOverlay.setPosition(undefined);
-                closer.blur();
-                return false;
-            };
+            return coordinates;
+        }
+        
+        // Inizializza la mappa OpenLayers
+        function initMap() {
+            console.log("Inizializzazione mappa...");
             
-            // Crea lo stile per i marker
-            const markerStyle = new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 8,
-                    fill: new ol.style.Fill({
-                        color: '#2a6e9c'
-                    }),
-                    stroke: new ol.style.Stroke({
-                        color: '#fff',
-                        width: 2
+            try {
+                // Crea una fonte per i vettori
+                vectorSource = new ol.source.Vector();
+                
+                // Crea un layer vettoriale con uno stile personalizzato
+                const vectorLayer = new ol.layer.Vector({
+                    source: vectorSource,
+                    style: new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 8,
+                            fill: new ol.style.Fill({
+                                color: '#2a6e9c'
+                            }),
+                            stroke: new ol.style.Stroke({
+                                color: '#fff',
+                                width: 2
+                            })
+                        })
                     })
-                })
-            });
-            
-            // Crea una fonte per i vettori (marker)
-            vectorSource = new ol.source.Vector();
-            
-            // Crea un layer vettoriale
-            const vectorLayer = new ol.layer.Vector({
-                source: vectorSource,
-                style: markerStyle
-            });
-            
-            // Crea la mappa centrata sull'Italia
-            map = new ol.Map({
-                target: 'map',
-                layers: [
-                    new ol.layer.Tile({
-                        source: new ol.source.OSM()
-                    }),
-                    vectorLayer
-                ],
-                overlays: [popupOverlay],
-                view: new ol.View({
-                    center: ol.proj.fromLonLat([12.4964, 41.9028]), // Roma
-                    zoom: 6
-                })
-            });
-            
-            // Aggiungi la gestione dei click sulla mappa per mostrare i popup
-            map.on('click', function(evt) {
-                const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
-                    return feature;
                 });
                 
-                if (feature) {
-                    const coordinates = feature.getGeometry().getCoordinates();
-                    popupOverlay.setPosition(coordinates);
-                    
-                    const job = feature.get('job');
-                    const date = new Date(job.created_at);
-                    
-                    content.innerHTML = `
-                        <h3>${job.title}</h3>
-                        <div class="company">${job.company}</div>
-                        <div class="description">${job.description}</div>
-                        <div class="date">Pubblicato: ${date.toLocaleDateString()}</div>
-                    `;
-                } else {
+                // Crea la mappa
+                map = new ol.Map({
+                    target: 'map',
+                    layers: [
+                        new ol.layer.Tile({
+                            source: new ol.source.OSM()
+                        }),
+                        vectorLayer
+                    ],
+                    view: new ol.View({
+                        center: ol.proj.fromLonLat([12.4964, 41.9028]), // Centrato su Roma
+                        zoom: 6
+                    }),
+                    controls: ol.control.defaults()
+                });
+                
+                // Crea il popup overlay
+                const container = document.getElementById('popup');
+                const closer = document.getElementById('popup-closer');
+                
+                popupOverlay = new ol.Overlay({
+                    element: container,
+                    autoPan: true,
+                    autoPanAnimation: {
+                        duration: 250
+                    }
+                });
+                
+                map.addOverlay(popupOverlay);
+                
+                // Aggiungi un evento al bottone di chiusura
+                closer.onclick = function() {
                     popupOverlay.setPosition(undefined);
-                }
-            });
-            
-            // Carica i lavori esistenti
-            loadJobs();
+                    closer.blur();
+                    return false;
+                };
+                
+                // Aggiungi un evento di click sulla mappa
+                map.on('click', function(evt) {
+                    const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+                        return feature;
+                    });
+                    
+                    if (feature) {
+                        const job = feature.get('job');
+                        if (job) {
+                            const coordinates = feature.getGeometry().getCoordinates();
+                            popupOverlay.setPosition(coordinates);
+                            
+                            const date = new Date(job.created_at);
+                            document.getElementById('popup-content').innerHTML = `
+                                <h3>${job.title}</h3>
+                                <div class="company">${job.company}</div>
+                                <div class="description">${job.description}</div>
+                                <div class="date">Pubblicato: ${date.toLocaleDateString()}</div>
+                            `;
+                            container.style.display = 'block';
+                        }
+                    } else {
+                        popupOverlay.setPosition(undefined);
+                    }
+                });
+                
+                console.log("Mappa inizializzata con successo!");
+                document.getElementById('mapLoading').style.display = 'none';
+                document.getElementById('map').classList.add('map-loaded');
+                
+                // Carica i lavori dopo che la mappa è pronta
+                loadJobs();
+                
+            } catch (error) {
+                console.error("Errore durante l'inizializzazione della mappa:", error);
+                document.getElementById('mapLoading').innerHTML = 
+                    `Errore durante il caricamento della mappa: ${error.message}. <button onclick="initMap()">Riprova</button>`;
+            }
         }
-
-        // Funzione per estrarre coordinate da un link Google Maps
-        function extractCoordinatesFromLink(link) {
+        
+        // Funzione per testare la connessione a Supabase
+        async function testSupabaseConnection() {
             try {
-                // Cerchiamo diversi pattern di coordinate nei link di Google Maps
-                
-                // Pattern: @lat,lng,zoom format
-                let atMatch = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-                if (atMatch) {
-                    return {
-                        latitude: parseFloat(atMatch[1]),
-                        longitude: parseFloat(atMatch[2])
-                    };
-                }
-                
-                // Pattern: ?q=lat,lng format
-                let qMatch = link.match(/\?q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                if (qMatch) {
-                    return {
-                        latitude: parseFloat(qMatch[1]),
-                        longitude: parseFloat(qMatch[2])
-                    };
-                }
-                
-                // Cerca parametri nell'URL
-                const url = new URL(link);
-                const params = new URLSearchParams(url.search);
-                
-                // Pattern: ?ll=lat,lng
-                const ll = params.get('ll');
-                if (ll) {
-                    const [lat, lng] = ll.split(',');
-                    if (lat && lng) {
-                        return {
-                            latitude: parseFloat(lat),
-                            longitude: parseFloat(lng)
-                        };
+                if (typeof supabase === 'undefined') {
+                    // Cerca di creare il client se non esiste
+                    if (typeof supabaseJs !== 'undefined' && typeof supabaseJs.createClient === 'function') {
+                        window.supabase = supabaseJs.createClient(supabaseUrl, supabaseKey);
+                    } else if (typeof createClient === 'function') {
+                        window.supabase = createClient(supabaseUrl, supabaseKey);
+                    } else {
+                        console.error("Supabase non è disponibile");
+                        return false;
                     }
                 }
                 
-                // Non sono state trovate coordinate valide
-                return null;
-            } catch (error) {
-                console.error("Errore nell'estrazione delle coordinate:", error);
-                return null;
+                const { data, error } = await supabase.from('jobs').select('count()', { count: 'exact', head: true });
+                
+                if (error) {
+                    console.error("Errore di connessione a Supabase:", error);
+                    return false;
+                }
+                
+                console.log("Connessione a Supabase riuscita!");
+                return true;
+            } catch (e) {
+                console.error("Eccezione durante il test di Supabase:", e);
+                return false;
             }
         }
-
-        // Carica i lavori dal database e aggiungili alla mappa
+        
+        // Carica i lavori dal database
         async function loadJobs() {
+            console.log("Caricamento lavori...");
+            
             try {
+                // Verifica la connessione prima
+                const connected = await testSupabaseConnection();
+                
+                if (!connected) {
+                    console.log("Connessione a Supabase fallita, usando dati di esempio");
+                    useSampleData();
+                    return;
+                }
+                
+                // Inizializza Supabase se necessario
+                if (typeof supabase === 'undefined') {
+                    if (typeof supabaseJs !== 'undefined') {
+                        window.supabase = supabaseJs.createClient(supabaseUrl, supabaseKey);
+                    } else {
+                        console.error("Libreria Supabase non disponibile");
+                        useSampleData();
+                        return;
+                    }
+                }
+                
+                // Ottieni i lavori
                 const { data: jobs, error } = await supabase
                     .from('jobs')
                     .select('*')
                     .order('created_at', { ascending: false });
                 
                 if (error) {
-                    console.error("Error loading jobs:", error);
-                    // Fallback a dati di esempio se c'è un errore
+                    console.error("Errore nel caricamento dei lavori:", error);
                     useSampleData();
                     return;
                 }
                 
                 if (!jobs || jobs.length === 0) {
-                    console.log("No jobs found, using sample data for demonstration");
+                    console.log("Nessun lavoro trovato, uso dati di esempio");
                     useSampleData();
                     return;
                 }
@@ -591,7 +651,7 @@
                 // Aggiorna la lista dei lavori
                 updateJobList(jobs);
             } catch (error) {
-                console.error("Failed to load jobs:", error);
+                console.error("Errore nel caricamento dei lavori:", error);
                 useSampleData();
             }
         }
@@ -649,24 +709,28 @@
             jobsData = sampleJobs;
             
             // Pulisci i marker esistenti
-            vectorSource.clear();
-            
-            // Aggiungi i marker per ogni lavoro di esempio
-            sampleJobs.forEach(job => {
-                const feature = new ol.Feature({
-                    geometry: new ol.geom.Point(
-                        ol.proj.fromLonLat([job.longitude, job.latitude])
-                    )
+            if (vectorSource) {
+                vectorSource.clear();
+                
+                // Aggiungi i marker per ogni lavoro di esempio
+                sampleJobs.forEach(job => {
+                    const feature = new ol.Feature({
+                        geometry: new ol.geom.Point(
+                            ol.proj.fromLonLat([job.longitude, job.latitude])
+                        )
+                    });
+                    
+                    // Salva i dati del lavoro come proprietà della feature
+                    feature.set('job', job);
+                    
+                    vectorSource.addFeature(feature);
                 });
                 
-                // Salva i dati del lavoro come proprietà della feature
-                feature.set('job', job);
-                
-                vectorSource.addFeature(feature);
-            });
-            
-            // Aggiorna la lista dei lavori
-            updateJobList(sampleJobs);
+                // Aggiorna la lista dei lavori
+                updateJobList(sampleJobs);
+            } else {
+                console.error("vectorSource non inizializzato");
+            }
         }
 
         // Aggiorna la lista dei lavori nel sidebar
@@ -725,6 +789,7 @@
                                     <div class="description">${job.description}</div>
                                     <div class="date">Pubblicato: ${date.toLocaleDateString()}</div>
                                 `;
+                                document.getElementById('popup').style.display = 'block';
                             }
                         }, 1100);
                     }
@@ -738,6 +803,45 @@
             loadingIndicator.style.display = 'flex';
             
             try {
+                // Verifica la connessione
+                const connected = await testSupabaseConnection();
+                
+                if (!connected) {
+                    loadingIndicator.style.display = 'none';
+                    alert("Impossibile connettersi al database. I dati di esempio verranno utilizzati.");
+                    
+                    // Aggiungi il lavoro ai dati di esempio
+                    const newJob = {
+                        id: jobsData.length + 1,
+                        ...formData
+                    };
+                    
+                    jobsData.unshift(newJob);
+                    
+                    // Aggiungi il marker sulla mappa
+                    const feature = new ol.Feature({
+                        geometry: new ol.geom.Point(
+                            ol.proj.fromLonLat([formData.longitude, formData.latitude])
+                        )
+                    });
+                    
+                    feature.set('job', newJob);
+                    vectorSource.addFeature(feature);
+                    
+                    // Aggiorna la lista dei lavori
+                    updateJobList(jobsData);
+                    
+                    // Mostra il messaggio di successo
+                    const successOverlay = document.getElementById('successOverlay');
+                    successOverlay.style.display = 'flex';
+                    setTimeout(() => {
+                        successOverlay.style.display = 'none';
+                    }, 3000);
+                    
+                    return true;
+                }
+                
+                // Invia al database se la connessione è ok
                 const { data, error } = await supabase
                     .from('jobs')
                     .insert([formData])
@@ -746,7 +850,7 @@
                 loadingIndicator.style.display = 'none';
                 
                 if (error) {
-                    console.error("Error submitting job:", error);
+                    console.error("Errore nell'invio del lavoro:", error);
                     alert("Si è verificato un errore durante il salvataggio dell'annuncio. Riprova più tardi.");
                     return false;
                 }
@@ -764,7 +868,7 @@
                 return true;
             } catch (error) {
                 loadingIndicator.style.display = 'none';
-                console.error("Failed to submit job:", error);
+                console.error("Errore nell'invio del lavoro:", error);
                 alert("Si è verificato un errore durante il salvataggio dell'annuncio. Riprova più tardi.");
                 return false;
             }
@@ -772,8 +876,29 @@
 
         // Inizializza quando la pagina si carica
         document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM caricato, inizializzazione app...");
+            
             // Inizializza la mappa
-            initMap();
+            if (typeof ol !== 'undefined') {
+                console.log("OpenLayers disponibile, inizializzazione mappa...");
+                initMap();
+            } else {
+                console.error("OpenLayers non disponibile!");
+                document.getElementById('mapLoading').innerHTML = 
+                    `Errore: OpenLayers non è disponibile. Ricarica la pagina o verifica la connessione.`;
+                
+                // Prova a caricare OpenLayers dinamicamente
+                const script = document.createElement('script');
+                script.src = "https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.14.1/build/ol.js";
+                script.onload = function() {
+                    console.log("OpenLayers caricato dinamicamente");
+                    initMap();
+                };
+                script.onerror = function() {
+                    console.error("Impossibile caricare OpenLayers dinamicamente");
+                };
+                document.head.appendChild(script);
+            }
             
             // Gestisci l'invio del form
             const jobForm = document.getElementById('jobForm');
