@@ -275,6 +275,55 @@
                 font-size: 20px;
             }
         }
+        
+        .ol-popup {
+            position: absolute;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #cccccc;
+            bottom: 12px;
+            left: -50px;
+            min-width: 280px;
+        }
+        
+        .ol-popup:after, .ol-popup:before {
+            top: 100%;
+            border: solid transparent;
+            content: " ";
+            height: 0;
+            width: 0;
+            position: absolute;
+            pointer-events: none;
+        }
+        
+        .ol-popup:after {
+            border-top-color: white;
+            border-width: 10px;
+            left: 48px;
+            margin-left: -10px;
+        }
+        
+        .ol-popup:before {
+            border-top-color: #cccccc;
+            border-width: 11px;
+            left: 48px;
+            margin-left: -11px;
+        }
+        
+        .ol-popup-closer {
+            text-decoration: none;
+            position: absolute;
+            top: 2px;
+            right: 8px;
+            color: #2a6e9c;
+            font-size: 16px;
+        }
+        
+        .ol-popup-closer:after {
+            content: "✖";
+        }
     </style>
 </head>
 <body>
@@ -286,6 +335,10 @@
     <div class="main-content">
         <div class="map-container">
             <div id="map"></div>
+            <div id="popup" class="ol-popup">
+                <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+                <div id="popup-content"></div>
+            </div>
         </div>
         
         <div class="sidebar">
@@ -348,51 +401,61 @@
         // Inizializza Supabase client
         const supabaseUrl = 'https://jlwhzoesyqsyzdkdpebc.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impsd2h6b2VzeXFzeXpka2RwZWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ0OTU0MTQsImV4cCI6MjA2MDA3MTQxNH0.ifvHUkBGLTjJlOvYE0dfMJDbGVFUC0MtvdUfNAPwKwc';
-        const supabase = supabaseClient.createClient(supabaseUrl, supabaseKey);
+        const supabase = supabaseJs.createClient(supabaseUrl, supabaseKey);
 
         // Variabili globali
         let map;
         let vectorSource;
         let popupOverlay;
         let jobsData = [];
-
-        // Funzione per estrarre coordinate da un link Google Maps
-        function extractCoordinatesFromLink(link) {
-            // Cerca modelli comuni nei link Google Maps
-            // Pattern 1: @37.7749,-122.4194,14z (formato: @latitude,longitude,zoom)
-            let pattern1 = /@(-?\d+\.\d+),(-?\d+\.\d+)/;
-            // Pattern 2: ?q=37.7749,-122.4194 (formato: ?q=latitude,longitude)
-            let pattern2 = /\?q=(-?\d+\.\d+),(-?\d+\.\d+)/;
-            
-            let match = link.match(pattern1) || link.match(pattern2);
-            
-            if (match) {
-                return {
-                    latitude: parseFloat(match[1]),
-                    longitude: parseFloat(match[2])
-                };
-            }
-            
-            return null;
-        }
-
-        // Inizializza la mappa
+        
+        // Funzione per inizializzare la mappa
         function initMap() {
-            // Crea l'origine vettoriale per i marker
-            vectorSource = new ol.source.Vector();
+            // Crea un elemento popup
+            const container = document.getElementById('popup');
+            const content = document.getElementById('popup-content');
+            const closer = document.getElementById('popup-closer');
             
-            // Crea il layer vettoriale
-            const vectorLayer = new ol.layer.Vector({
-                source: vectorSource,
-                style: new ol.style.Style({
-                    image: new ol.style.Icon({
-                        anchor: [0.5, 1],
-                        src: 'https://openlayers.org/en/latest/examples/data/icon.png'
+            // Crea un overlay per il popup
+            popupOverlay = new ol.Overlay({
+                element: container,
+                autoPan: true,
+                autoPanAnimation: {
+                    duration: 250
+                }
+            });
+            
+            // Aggiungi un handler per chiudere il popup
+            closer.onclick = function() {
+                popupOverlay.setPosition(undefined);
+                closer.blur();
+                return false;
+            };
+            
+            // Crea lo stile per i marker
+            const markerStyle = new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({
+                        color: '#2a6e9c'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#fff',
+                        width: 2
                     })
                 })
             });
             
-            // Inizializza la mappa
+            // Crea una fonte per i vettori (marker)
+            vectorSource = new ol.source.Vector();
+            
+            // Crea un layer vettoriale
+            const vectorLayer = new ol.layer.Vector({
+                source: vectorSource,
+                style: markerStyle
+            });
+            
+            // Crea la mappa centrata sull'Italia
             map = new ol.Map({
                 target: 'map',
                 layers: [
@@ -401,24 +464,12 @@
                     }),
                     vectorLayer
                 ],
+                overlays: [popupOverlay],
                 view: new ol.View({
-                    center: ol.proj.fromLonLat([11.3272, 44.4937]), // Coordinate di Bologna, Italia
-                    zoom: 5
+                    center: ol.proj.fromLonLat([12.4964, 41.9028]), // Roma
+                    zoom: 6
                 })
             });
-            
-            // Crea il popup overlay
-            const popupElement = document.createElement('div');
-            popupElement.className = 'popup';
-            
-            popupOverlay = new ol.Overlay({
-                element: popupElement,
-                positioning: 'bottom-center',
-                stopEvent: false,
-                offset: [0, -10]
-            });
-            
-            map.addOverlay(popupOverlay);
             
             // Aggiungi la gestione dei click sulla mappa per mostrare i popup
             map.on('click', function(evt) {
@@ -433,11 +484,11 @@
                     const job = feature.get('job');
                     const date = new Date(job.created_at);
                     
-                    popupElement.innerHTML = `
+                    content.innerHTML = `
                         <h3>${job.title}</h3>
                         <div class="company">${job.company}</div>
                         <div class="description">${job.description}</div>
-                        <div class="date">Posted: ${date.toLocaleDateString()}</div>
+                        <div class="date">Pubblicato: ${date.toLocaleDateString()}</div>
                     `;
                 } else {
                     popupOverlay.setPosition(undefined);
@@ -446,6 +497,53 @@
             
             // Carica i lavori esistenti
             loadJobs();
+        }
+
+        // Funzione per estrarre coordinate da un link Google Maps
+        function extractCoordinatesFromLink(link) {
+            try {
+                // Cerchiamo diversi pattern di coordinate nei link di Google Maps
+                
+                // Pattern: @lat,lng,zoom format
+                let atMatch = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                if (atMatch) {
+                    return {
+                        latitude: parseFloat(atMatch[1]),
+                        longitude: parseFloat(atMatch[2])
+                    };
+                }
+                
+                // Pattern: ?q=lat,lng format
+                let qMatch = link.match(/\?q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+                if (qMatch) {
+                    return {
+                        latitude: parseFloat(qMatch[1]),
+                        longitude: parseFloat(qMatch[2])
+                    };
+                }
+                
+                // Cerca parametri nell'URL
+                const url = new URL(link);
+                const params = new URLSearchParams(url.search);
+                
+                // Pattern: ?ll=lat,lng
+                const ll = params.get('ll');
+                if (ll) {
+                    const [lat, lng] = ll.split(',');
+                    if (lat && lng) {
+                        return {
+                            latitude: parseFloat(lat),
+                            longitude: parseFloat(lng)
+                        };
+                    }
+                }
+                
+                // Non sono state trovate coordinate valide
+                return null;
+            } catch (error) {
+                console.error("Errore nell'estrazione delle coordinate:", error);
+                return null;
+            }
         }
 
         // Carica i lavori dal database e aggiungili alla mappa
@@ -621,8 +719,7 @@
                                 const job = feature.get('job');
                                 const date = new Date(job.created_at);
                                 
-                                const popupElement = popupOverlay.getElement();
-                                popupElement.innerHTML = `
+                                document.getElementById('popup-content').innerHTML = `
                                     <h3>${job.title}</h3>
                                     <div class="company">${job.company}</div>
                                     <div class="description">${job.description}</div>
@@ -638,7 +735,7 @@
         // Funzione per inviare un nuovo lavoro
         async function submitJob(formData) {
             const loadingIndicator = document.getElementById('loadingIndicator');
-            loadingIndicator.style.display = 'block';
+            loadingIndicator.style.display = 'flex';
             
             try {
                 const { data, error } = await supabase
